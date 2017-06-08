@@ -4,4 +4,6 @@
     <string name="hint_et_time">Uhrzeit</string>
 
     <string name="date_picker_dialog_title">Datum wählen</string>
+    <string name="time_picker_dialog_title">Uhrzeit wählen</string>
 </resources>
+
