@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">MeinFangbuch</string>
+    <string name="hint_et_date">Datum</string>
+    <string name="hint_et_time">Uhrzeit</string>
+
+    <string name="date_picker_dialog_title">Datum wählen</string>
 </resources>
