@@ -4,6 +4,7 @@ import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.media.Image;
 import android.support.design.widget.TextInputLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -11,25 +12,46 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.animation.Animation;
 import android.view.animation.Transformation;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.ArrayAdapter;
+import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
+import android.widget.Spinner;
 import android.widget.TimePicker;
 
 import java.sql.Time;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
+
+import de.tellfee.meinfangbuch.adapter.FischartLVAdapter;
+import de.tellfee.meinfangbuch.model.Fischart;
 
 public class MainActivity extends AppCompatActivity {
     private FrameLayout fl_add_photo;
+    private Spinner sp_fischart;
     private EditText et_time;
     private EditText et_date;
+    private EditText et_gewicht;
+    private EditText et_laenge;
     private TextInputLayout til_et_date;
     private TextInputLayout til_et_time;
+    private LinearLayout ll_details_content;
+    private RelativeLayout rl_details;
+    private ImageView iv_details_icon;
+
+
+    private ArrayList<Fischart> fischarten  = new ArrayList<>();
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,13 +62,26 @@ public class MainActivity extends AppCompatActivity {
         getSupportActionBar().setDisplayShowTitleEnabled(false);
         getSupportActionBar().setElevation(0);
 
-        fl_add_photo    = (FrameLayout) findViewById(R.id.fl_add_photo);
-        et_time         = (EditText) findViewById(R.id.et_time);
-        et_date         = (EditText) findViewById(R.id.et_date);
-        til_et_date     = (TextInputLayout) findViewById(R.id.til_et_date);
-        til_et_time     = (TextInputLayout) findViewById(R.id.til_et_time);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN);
 
+        fl_add_photo        = (FrameLayout) findViewById(R.id.fl_add_photo);
+        sp_fischart         = (Spinner) findViewById(R.id.sp_fischart);
+        et_time             = (EditText) findViewById(R.id.et_time);
+        et_date             = (EditText) findViewById(R.id.et_date);
+        et_gewicht          = (EditText) findViewById(R.id.et_gewicht);
+        et_laenge           = (EditText) findViewById(R.id.et_laenge);
+        til_et_date         = (TextInputLayout) findViewById(R.id.til_et_date);
+        til_et_time         = (TextInputLayout) findViewById(R.id.til_et_time);
+        ll_details_content  = (LinearLayout) findViewById(R.id.ll_details_content);
+        rl_details          = (RelativeLayout) findViewById(R.id.rl_details);
+        iv_details_icon     = (ImageView) findViewById(R.id.iv_details_icon);
 
+        fischarten.add(new Fischart(1, "Zander"));
+        fischarten.add(new Fischart(2, "Hecht"));
+        fischarten.add(new Fischart(3, "Wels"));
+
+        FischartLVAdapter fischartAdapter   = new FischartLVAdapter(getApplicationContext(), fischarten);
+        sp_fischart.setAdapter(fischartAdapter);
 
         fl_add_photo.setOnTouchListener(new View.OnTouchListener() {
             @Override
@@ -76,15 +111,16 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        Button bt   = (Button)findViewById(R.id.bt);
-        bt.setOnClickListener(new View.OnClickListener() {
+
+        rl_details.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                FrameLayout fl  = (FrameLayout)findViewById(R.id.fl);
-                if(fl.getVisibility() == View.GONE){
-                    expand(fl);
+                if(ll_details_content.getVisibility() == View.VISIBLE){
+                    collapse(ll_details_content);
+                    rotateView(iv_details_icon, -90);
                 }else{
-                    collapse(fl);
+                    expand(ll_details_content);
+                    rotateView(iv_details_icon, 0);
                 }
             }
         });
@@ -140,7 +176,6 @@ public class MainActivity extends AppCompatActivity {
     public static void expand(final View v) {
         v.measure(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         final int targetHeight = v.getMeasuredHeight();
-        Log.e("HEIGHT", ""+targetHeight);
 
         // Older versions of android (pre API 21) cancel animations for views with a height of 0.
         v.getLayoutParams().height = 1;
@@ -148,7 +183,6 @@ public class MainActivity extends AppCompatActivity {
         Animation a = new Animation(){
             @Override
             protected void applyTransformation(float interpolatedTime, Transformation t) {
-                Log.e("TIME", ""+interpolatedTime);
                 v.getLayoutParams().height = interpolatedTime == 1
                         ? ViewGroup.LayoutParams.WRAP_CONTENT
                         : (int)(targetHeight * interpolatedTime);
@@ -161,7 +195,8 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        a.setDuration((int)(targetHeight / v.getContext().getResources().getDisplayMetrics().density) * 30);
+//        a.setDuration((int)(targetHeight / v.getContext().getResources().getDisplayMetrics().density) * 4);
+        a.setDuration(300);
         v.startAnimation(a);
 
     }
@@ -171,7 +206,6 @@ public class MainActivity extends AppCompatActivity {
         Animation a = new Animation(){
             @Override
             protected void applyTransformation(float interpolatedTime, Transformation t) {
-                Log.e("TIME", ""+interpolatedTime);
                 if(interpolatedTime == 1){
                     v.setVisibility(View.GONE);
                 }else{
@@ -186,7 +220,27 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        a.setDuration((int)(initialHeight / v.getContext().getResources().getDisplayMetrics().density));
+//        a.setDuration((int)(initialHeight / v.getContext().getResources().getDisplayMetrics().density) * 4);
+        a.setDuration(300);
         v.startAnimation(a);
+    }
+
+
+    public void rotateView(final View item, final int deg){
+        final float rotation    = item.getRotation();
+        Log.e("rotation", ""+rotation+" deg: "+deg);
+        Animation a     = new Animation() {
+            @Override
+            protected void applyTransformation(float interpolatedTime, Transformation t) {
+                float nextRotation;
+                float delta = deg - rotation;
+
+                nextRotation    = rotation + (delta * interpolatedTime);
+                item.setRotation(nextRotation);
+            }
+        };
+
+        a.setDuration(300);
+        item.startAnimation(a);
     }
 }
