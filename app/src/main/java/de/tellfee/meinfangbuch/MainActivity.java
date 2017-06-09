@@ -9,6 +9,8 @@ import android.support.design.widget.TextInputLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -52,18 +54,15 @@ public class MainActivity extends AppCompatActivity {
 
     private ArrayList<Fischart> fischarten  = new ArrayList<>();
 
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
+    private void initUi(){
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         getSupportActionBar().setDisplayShowTitleEnabled(false);
         getSupportActionBar().setElevation(0);
 
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN);
+    }
 
+    private void initViews(){
         fl_add_photo        = (FrameLayout) findViewById(R.id.fl_add_photo);
         sp_fischart         = (Spinner) findViewById(R.id.sp_fischart);
         et_time             = (EditText) findViewById(R.id.et_time);
@@ -75,14 +74,10 @@ public class MainActivity extends AppCompatActivity {
         ll_details_content  = (LinearLayout) findViewById(R.id.ll_details_content);
         rl_details          = (RelativeLayout) findViewById(R.id.rl_details);
         iv_details_icon     = (ImageView) findViewById(R.id.iv_details_icon);
+    }
 
-        fischarten.add(new Fischart(1, "Zander"));
-        fischarten.add(new Fischart(2, "Hecht"));
-        fischarten.add(new Fischart(3, "Wels"));
 
-        FischartLVAdapter fischartAdapter   = new FischartLVAdapter(getApplicationContext(), fischarten);
-        sp_fischart.setAdapter(fischartAdapter);
-
+    private void initEvents(){
         fl_add_photo.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
@@ -90,11 +85,9 @@ public class MainActivity extends AppCompatActivity {
                     Intent intent = new Intent(getApplicationContext(), CameraActivity.class);
                     startActivity(intent);
                 }
-
                 return true;
             }
         });
-
 
         et_date.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -111,7 +104,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-
         rl_details.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -121,12 +113,38 @@ public class MainActivity extends AppCompatActivity {
                 }else{
                     expand(ll_details_content);
                     rotateView(iv_details_icon, 0);
+                    et_gewicht.requestFocus();
                 }
             }
         });
     }
 
 
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        initUi();
+
+        initViews();
+
+        fischarten.add(new Fischart(1, "Zander"));
+        fischarten.add(new Fischart(2, "Hecht"));
+        fischarten.add(new Fischart(3, "Wels"));
+
+        FischartLVAdapter fischartAdapter   = new FischartLVAdapter(getApplicationContext(), fischarten);
+        sp_fischart.setAdapter(fischartAdapter);
+
+        initEvents();
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater   = getMenuInflater();
+        inflater.inflate(R.menu.fang_hinzufuegen_speichern, menu);
+        return true;
+    }
 
     private void prepareTimePickerDialog() {
         final Calendar time   = Calendar.getInstance();
@@ -228,7 +246,6 @@ public class MainActivity extends AppCompatActivity {
 
     public void rotateView(final View item, final int deg){
         final float rotation    = item.getRotation();
-        Log.e("rotation", ""+rotation+" deg: "+deg);
         Animation a     = new Animation() {
             @Override
             protected void applyTransformation(float interpolatedTime, Transformation t) {

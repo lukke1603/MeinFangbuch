@@ -6,7 +6,8 @@
     <string name="date_picker_dialog_title">Datum wählen</string>
     <string name="time_picker_dialog_title">Uhrzeit wählen</string>
     <string name="tv_details">Details</string>
-    <string name="hint_et_gewicht">Gewicht</string>
-    <string name="hint_et_laenge">Länge</string>
+    <string name="hint_et_gewicht">Gewicht in kg</string>
+    <string name="hint_et_laenge">Länge in cm</string>
+    <string name="fang_speichern">Fang speichern</string>
 </resources>
 
