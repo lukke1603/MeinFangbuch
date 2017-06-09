@@ -213,7 +213,6 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-//        a.setDuration((int)(targetHeight / v.getContext().getResources().getDisplayMetrics().density) * 4);
         a.setDuration(300);
         v.startAnimation(a);
 
@@ -238,7 +237,6 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-//        a.setDuration((int)(initialHeight / v.getContext().getResources().getDisplayMetrics().density) * 4);
         a.setDuration(300);
         v.startAnimation(a);
     }
