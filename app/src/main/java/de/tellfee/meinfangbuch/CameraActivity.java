@@ -1,6 +1,8 @@
 package de.tellfee.meinfangbuch;
 
 import android.Manifest;
+import android.annotation.TargetApi;
+import android.app.Activity;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
@@ -11,6 +13,7 @@ import android.graphics.Camera;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -25,8 +28,11 @@ import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.ExifInterface;
 import android.media.Image;
 import android.media.ImageReader;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -34,24 +40,33 @@ import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.os.EnvironmentCompat;
+import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
+import android.util.TypedValue;
 import android.view.OrientationEventListener;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
@@ -63,6 +78,7 @@ import java.util.List;
 public class CameraActivity extends AppCompatActivity {
     private TextureView tv_preview;
     private ImageView iv_capture_image;
+    private LinearLayout ll_thumb_preview;
 
     private final String SAVE_PATH  = String.valueOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM))+"/MeinFangbuch";
 
@@ -83,6 +99,9 @@ public class CameraActivity extends AppCompatActivity {
     private HandlerThread backgroundThread;
     private Handler backgroundHandler;
 
+    private HandlerThread streamBackgroundThread;
+    private Handler streamBackgroundHandler;
+
     private CaptureRequest.Builder streamCaptureRequestBuilder;
     private CameraCaptureSession streamCaptureSession;
 
@@ -101,6 +120,12 @@ public class CameraActivity extends AppCompatActivity {
 
     private int orientation;
     private Sensor sensor;
+
+
+    private Image capturedImage;
+    private boolean inSavingProgress = false;
+
+    private ArrayList<Uri> images;
 
 
     private TextureView.SurfaceTextureListener surfaceTextureListener   = new TextureView.SurfaceTextureListener() {
@@ -137,6 +162,9 @@ public class CameraActivity extends AppCompatActivity {
 
         tv_preview          = (TextureView) findViewById(R.id.tv_preview);
         iv_capture_image    = (ImageView) findViewById(R.id.iv_capture_image);
+        ll_thumb_preview    = (LinearLayout) findViewById(R.id.ll_thumb_preview);
+
+        images              = new ArrayList<>();
 
         tv_preview.setSurfaceTextureListener(surfaceTextureListener);
         iv_capture_image.setOnClickListener(new View.OnClickListener() {
@@ -154,7 +182,7 @@ public class CameraActivity extends AppCompatActivity {
             tv_preview.setSurfaceTextureListener(surfaceTextureListener);
         }
 
-        SensorManager sensorManager = (SensorManager) getApplicationContext().getSystemService(Context.SENSOR_SERVICE);
+        sensorManager   = (SensorManager) getApplicationContext().getSystemService(Context.SENSOR_SERVICE);
         sensorListener  = new SensorEventListener() {
             @Override
             public void onSensorChanged(SensorEvent event) {
@@ -188,87 +216,19 @@ public class CameraActivity extends AppCompatActivity {
             return;
         }
         try {
-//            final int rotation = ((WindowManager) getApplicationContext().getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getOrientation();
-//            final int rotation = getScreenOrientation();
-            final int rotation = orientation;
-
-
             imageReader                     = ImageReader.newInstance(streamSize.getWidth(), streamSize.getHeight(), ImageFormat.JPEG, 1);
             List<Surface> outputSurfaces    = new ArrayList<Surface>(2);
             outputSurfaces.add(imageReader.getSurface());
             outputSurfaces.add(new Surface(tv_preview.getSurfaceTexture()));
 
-
             captureCaptureRequestBuilder    = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
             captureCaptureRequestBuilder.addTarget(imageReader.getSurface());
             captureCaptureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-//            captureCaptureRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, 1);
-
-
-            File filePath      = new File(SAVE_PATH);
-            if(!filePath.exists()){
-                filePath.mkdir();
-            }
-
-            SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd_HHmmss");
-            String fileName         = "DSC_"+format.format(new Date())+".jpg";
-            final File file         = new File(SAVE_PATH+"/"+fileName);
-            if(file.exists()){
-                file.delete();
-            }
 
             ImageReader.OnImageAvailableListener readerListener = new ImageReader.OnImageAvailableListener() {
                 @Override
                 public void onImageAvailable(ImageReader reader) {
-                    Image image         = null;
-                    try {
-                        image               = reader.acquireLatestImage();
-                        ByteBuffer buffer   = image.getPlanes()[0].getBuffer();
-                        byte[] bytes        = new byte[buffer.capacity()];
-                        buffer.get(bytes);
-
-                        Matrix rotate       = new Matrix();
-                        Log.e("ROTATION", ""+rotation+" -> "+ORIENTATIONS.get(rotation));
-                        rotate.postRotate(rotation);
-                        Bitmap bmp          = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-
-                        Bitmap bmpRotated   = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), rotate, false);
-                        save(bmpRotated);
-//                        save(bytes);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }finally {
-                        if(image != null){
-                            image.close();
-                        }
-                    }
-
-
-                }
-
-                private void save(Bitmap bmp) throws IOException {
-                    FileOutputStream fOut = null;
-                    try {
-                        fOut    = new FileOutputStream(file);
-                        bmp.compress(Bitmap.CompressFormat.JPEG, 90, fOut);
-                        fOut.flush();
-                        fOut.close();
-                    } catch (FileNotFoundException e) {
-                        e.printStackTrace();
-                    }
-                }
-
-                private void save(byte[] bytes) throws IOException {
-                    OutputStream output = null;
-
-                    try {
-                        output  = new FileOutputStream(file);
-                        output.write(bytes);
-                    } finally {
-                        if(output != null){
-                            output.close();
-                        }
-                    }
+                    capturedImage               = reader.acquireNextImage();
                 }
             };
 
@@ -305,7 +265,7 @@ public class CameraActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         Log.e("CAMERA_ACTIVITY", "onPause");
-        //closeCamera();
+        closeCamera();
         sensorManager.unregisterListener(sensorListener, sensor);
         stopBackgroundThread();
         super.onPause();
@@ -365,7 +325,6 @@ public class CameraActivity extends AppCompatActivity {
     private void createCameraPreview() {
         surfaceTexture          = tv_preview.getSurfaceTexture();
         surfaceTexture.setDefaultBufferSize(streamSize.getWidth(), streamSize.getHeight());
-//        surfaceTexture.setDefaultBufferSize(1080, 1080);
         Surface surface         = new Surface(surfaceTexture);
 
         try {
@@ -395,20 +354,129 @@ public class CameraActivity extends AppCompatActivity {
 
     private void updatePreview() {
         previewSizeScaled   = getPreviewSizeScaled();
-//        Rect rect           = getPreviewRect();
-//        surfaceTexture.setDefaultBufferSize(previewSizeScaled.getWidth(), previewSizeScaled.getHeight());
 
         streamCaptureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
-//        streamCaptureRequestBuilder.set(CaptureRequest.SCALER_CROP_REGION, rect);
         try {
-            streamCaptureSession.setRepeatingRequest(streamCaptureRequestBuilder.build(), null, backgroundHandler);
+            streamCaptureSession.setRepeatingRequest(streamCaptureRequestBuilder.build(), new CameraCaptureSession.CaptureCallback() {
+                @Override
+                public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                    super.onCaptureCompleted(session, request, result);
+
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            saveCapturedImage();
+                        }
+                    }).start();
+                }
+            }, streamBackgroundHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
     }
 
-    private Rect getPreviewRect(){
-        Rect r = new Rect();
+    private void saveCapturedImage() {
+        if(capturedImage != null && inSavingProgress == false){
+            inSavingProgress        = true;
+            File file               = getFile();
+
+            ByteBuffer buffer       = capturedImage.getPlanes()[0].getBuffer();
+            Log.e("CAPACITY", buffer.capacity()+"");
+            byte[] bytes            = new byte[buffer.capacity()];
+            buffer.get(bytes);
+
+            Bitmap bmp              = null;
+            bmp                     = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+
+            if(orientation > 0){
+                Matrix rotate       = new Matrix();
+                Log.e("ROTATION", ""+orientation+" -> "+ORIENTATIONS.get(orientation));
+                rotate.postRotate(orientation);
+
+                bmp                 = Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), rotate, false);
+            }
+
+            final Bitmap thumbnail    = createThumbnail(bmp);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    ImageView iv    = new ImageView(getApplicationContext());
+                    iv.setImageBitmap(thumbnail);
+
+                    int width   = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 60, getResources().getDisplayMetrics());
+                    int margin  = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 10, getResources().getDisplayMetrics());
+
+                    ViewGroup.MarginLayoutParams params   = new ViewGroup.MarginLayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT);
+                    params.setMargins(margin, 0, margin, 0);
+                    iv.setLayoutParams(params);
+                    iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                    iv.setBackgroundResource(R.drawable.thumbnail_border);
+
+                    iv.requestLayout();
+
+                    ll_thumb_preview.addView(iv);
+                }
+            });
+
+            try {
+                save(bmp, file);
+
+                Uri fileUri = Uri.fromFile(file);
+                images.add(fileUri);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }finally {
+                if (bmp != null && !bmp.isRecycled()){
+                    bmp.recycle();
+                }
+                if(capturedImage != null){
+                    capturedImage.close();
+                    capturedImage = null;
+                }
+
+                inSavingProgress = false;
+            }
+        }
+    }
+
+
+
+    private Bitmap createThumbnail(Bitmap bmp) {
+        int width;
+        int height;
+        if(bmp.getWidth() < bmp.getHeight()){
+            width           = 200;
+            double factor   = (float)width / (float)bmp.getWidth();
+            height          = (int) (bmp.getHeight() * factor);
+        }else{
+            height          = 200;
+            double factor   = (float)height / (float)bmp.getHeight();
+            width           = (int) (bmp.getWidth() * factor);
+        }
+
+        Bitmap thumbnail    = Bitmap.createScaledBitmap(bmp, width, height, false);
+
+        return thumbnail;
+    }
+
+    private File getFile() {
+        File filePath      = new File(SAVE_PATH);
+        if(!filePath.exists()){
+            filePath.mkdir();
+        }
+
+        SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd_HHmmss");
+        String fileName         = "DSC_"+format.format(new Date())+".jpg";
+        File file         = new File(SAVE_PATH+"/"+fileName);
+        if(file.exists()){
+            file.delete();
+        }
+
+        return file;
+    }
+
+    private RectF getPreviewRect(){
+        RectF r = new RectF();
 //        Size size       = previewSizeScaled;
         Size size       = new Size(1080, 1080);
         Log.e("PREVIEW-SIZE", ""+previewSize);
@@ -462,16 +530,26 @@ public class CameraActivity extends AppCompatActivity {
         backgroundThread = new HandlerThread("Camera Background");
         backgroundThread.start();
         backgroundHandler = new Handler(backgroundThread.getLooper());
+
+        streamBackgroundThread  = new HandlerThread("Stream Background");
+        streamBackgroundThread.start();
+        streamBackgroundHandler = new Handler(streamBackgroundThread.getLooper());
     }
 
 
     protected void stopBackgroundThread() {
         backgroundThread.quitSafely();
+        streamBackgroundThread.quitSafely();
         try {
             backgroundThread.join();
             backgroundThread = null;
             backgroundHandler.getLooper().quit();
             backgroundHandler = null;
+
+            streamBackgroundThread.join();
+            streamBackgroundThread = null;
+            streamBackgroundHandler.getLooper().quit();
+            streamBackgroundHandler = null;
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -496,67 +574,29 @@ public class CameraActivity extends AppCompatActivity {
     }
 
 
-    private int getScreenOrientation() {
-        int rotation = getWindowManager().getDefaultDisplay().getRotation();
-        DisplayMetrics dm = new DisplayMetrics();
-        getWindowManager().getDefaultDisplay().getMetrics(dm);
-        int width = dm.widthPixels;
-        int height = dm.heightPixels;
-        int orientation;
-        // if the device's natural orientation is portrait:
-        if ((rotation == Surface.ROTATION_0
-                || rotation == Surface.ROTATION_180) && height > width ||
-                (rotation == Surface.ROTATION_90
-                        || rotation == Surface.ROTATION_270) && width > height) {
-            switch(rotation) {
-                case Surface.ROTATION_0:
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
-                    break;
-                case Surface.ROTATION_90:
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
-                    break;
-                case Surface.ROTATION_180:
-                    orientation =
-                            ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;
-                    break;
-                case Surface.ROTATION_270:
-                    orientation =
-                            ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
-                    break;
-                default:
-                    Log.e("LOG", "Unknown screen orientation. Defaulting to " +
-                            "portrait.");
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
-                    break;
-            }
+    private void save(Bitmap bmp, File file) throws IOException {
+        FileOutputStream fOut = null;
+        try {
+            fOut    = new FileOutputStream(file);
+            bmp.compress(Bitmap.CompressFormat.JPEG, 85, fOut);
+            fOut.flush();
+            fOut.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
         }
-        // if the device's natural orientation is landscape or if the device
-        // is square:
-        else {
-            switch(rotation) {
-                case Surface.ROTATION_0:
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
-                    break;
-                case Surface.ROTATION_90:
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
-                    break;
-                case Surface.ROTATION_180:
-                    orientation =
-                            ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
-                    break;
-                case Surface.ROTATION_270:
-                    orientation =
-                            ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;
-                    break;
-                default:
-                    Log.e("LOG", "Unknown screen orientation. Defaulting to " +
-                            "landscape.");
-                    orientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
-                    break;
-            }
-        }
+    }
 
-        return orientation;
+    private void save(byte[] bytes, File file) throws IOException {
+        OutputStream output = null;
+
+        try {
+            output  = new FileOutputStream(file);
+            output.write(bytes);
+        } finally {
+            if(output != null){
+                output.close();
+            }
+        }
     }
 
 
