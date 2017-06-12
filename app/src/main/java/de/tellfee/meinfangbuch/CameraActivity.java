@@ -102,6 +102,9 @@ public class CameraActivity extends AppCompatActivity {
     private HandlerThread streamBackgroundThread;
     private Handler streamBackgroundHandler;
 
+    private HandlerThread saveBackgroundThread;
+    private Handler saveBackgroundHandler;
+
     private CaptureRequest.Builder streamCaptureRequestBuilder;
     private CameraCaptureSession streamCaptureSession;
 
@@ -362,12 +365,13 @@ public class CameraActivity extends AppCompatActivity {
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
 
-                    new Thread(new Runnable() {
+                    saveBackgroundHandler.post(new Runnable() {
                         @Override
                         public void run() {
                             saveCapturedImage();
                         }
-                    }).start();
+                    });
+
                 }
             }, streamBackgroundHandler);
         } catch (CameraAccessException e) {
@@ -397,23 +401,25 @@ public class CameraActivity extends AppCompatActivity {
             }
 
             final Bitmap thumbnail    = createThumbnail(bmp);
+            final ImageView iv    = new ImageView(getApplicationContext());
+            iv.setImageBitmap(thumbnail);
+
+            int width   = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 60, getResources().getDisplayMetrics());
+            int margin  = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 10, getResources().getDisplayMetrics());
+            int padding = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 1, getResources().getDisplayMetrics());
+
+            ViewGroup.MarginLayoutParams params   = new ViewGroup.MarginLayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT);
+            params.setMargins(margin, 0, margin, 0);
+            iv.setLayoutParams(params);
+            iv.setPadding(padding, padding, padding, padding);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            iv.setCropToPadding(true);
+            iv.setBackgroundResource(R.drawable.thumbnail_border);
+
+            iv.requestLayout();
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    ImageView iv    = new ImageView(getApplicationContext());
-                    iv.setImageBitmap(thumbnail);
-
-                    int width   = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 60, getResources().getDisplayMetrics());
-                    int margin  = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 10, getResources().getDisplayMetrics());
-
-                    ViewGroup.MarginLayoutParams params   = new ViewGroup.MarginLayoutParams(width, ViewGroup.LayoutParams.MATCH_PARENT);
-                    params.setMargins(margin, 0, margin, 0);
-                    iv.setLayoutParams(params);
-                    iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                    iv.setBackgroundResource(R.drawable.thumbnail_border);
-
-                    iv.requestLayout();
-
                     ll_thumb_preview.addView(iv);
                 }
             });
@@ -534,11 +540,16 @@ public class CameraActivity extends AppCompatActivity {
         streamBackgroundThread  = new HandlerThread("Stream Background");
         streamBackgroundThread.start();
         streamBackgroundHandler = new Handler(streamBackgroundThread.getLooper());
+
+        saveBackgroundThread  = new HandlerThread("Stream Background");
+        saveBackgroundThread.start();
+        saveBackgroundHandler = new Handler(saveBackgroundThread.getLooper());
     }
 
 
     protected void stopBackgroundThread() {
         backgroundThread.quitSafely();
+        saveBackgroundThread.quitSafely();
         streamBackgroundThread.quitSafely();
         try {
             backgroundThread.join();
@@ -550,6 +561,11 @@ public class CameraActivity extends AppCompatActivity {
             streamBackgroundThread = null;
             streamBackgroundHandler.getLooper().quit();
             streamBackgroundHandler = null;
+
+            saveBackgroundThread.join();
+            saveBackgroundThread = null;
+            saveBackgroundHandler.getLooper().quit();
+            saveBackgroundHandler = null;
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
